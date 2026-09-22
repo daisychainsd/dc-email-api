@@ -72,3 +72,10 @@ curl -s localhost:3000/api/cron/bandcamp -H "Authorization: Bearer $CRON_SECRET"
 README's Laylo auth section describes a shared-secret header — stale. The
 running code uses HMAC-SHA256 (`x-laylo-timestamp` + `x-signature-256` over
 `timestamp+rawBody`). CLAUDE.md is correct.
+
+
+## Physical Bandcamp order feed
+
+`GET /api/internal/bandcamp-merch` is a read-only, `INTERNAL_SECRET`-protected feed for Daisy Chain Merch Ops. It calls Bandcamp `merchorders/4/get_orders` with the configured `BANDCAMP_BAND_ID` (and optional `BANDCAMP_MEMBER_BAND_ID`), all dates, shipped and unshipped. It uses the existing OAuth cache and returns physical merchandise only. This route does not subscribe buyers, move the sales-report cursor, mark Bandcamp orders shipped, or send email.
+
+The site calls this feed hourly at minute 25, using its existing `DC_EMAIL_API_INTERNAL_SECRET`. The site owns normalization, Supabase persistence, deduplication and manual fulfillment. Physical Bandcamp orders appear alongside website orders at [Merch Ops](https://www.daisychainsd.com/ops/merch); digital music sales remain outside the shipping queue. Feed failures return 503 without exposing raw provider errors/customer data. Responses are never cached. Run `npm test` for auth, physical endpoint and error-path checks. See [site runbook](https://github.com/daisychainsd/daisychain-site/blob/main/OPERATIONS.md#bandcamp-physical-orders) and [deployment record](https://github.com/daisychainsd/daisychain-site/blob/main/BANDCAMP-ORDERS-2026-09-22.md).

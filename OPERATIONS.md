@@ -6,9 +6,11 @@ Funnels fan emails from three platforms into the Beehiiv newsletter list:
 - **Shotgun** ticket buyers — daily cron poll (16:00 UTC)
 - **Laylo** signups — real-time HMAC-verified webhook
 
-All paths converge on `src/lib/subscribe.ts` → Beehiiv
+The subscriber paths converge on `src/lib/subscribe.ts` → Beehiiv
 (`POST /v2/publications/{id}/subscriptions`), tagged `utm_source=<source>`,
 `utm_medium=daisychain-mail`. Duplicates are no-ops — every sync is safe to re-run.
+
+A separate protected physical Bandcamp order feed supplies Merch Ops hourly via the site. It does not subscribe buyers or move the sales cursor. The initial eight-order production import and replay are verified.
 
 ## Where it runs
 - Vercel: https://dc-email-api.vercel.app (Hobby plan → daily is the max cron cadence)
@@ -23,12 +25,14 @@ All paths converge on `src/lib/subscribe.ts` → Beehiiv
 | `POST /api/webhooks/laylo` | HMAC-SHA256 (`LAYLO_WEBHOOK_SECRET`) | Real-time signup ingest |
 | `POST /api/internal/backfill` | Bearer `INTERNAL_SECRET` | Manual Bandcamp date-window backfill |
 | `POST /api/internal/import-csv` | Bearer `INTERNAL_SECRET` | Manual CSV import |
+| `GET /api/internal/bandcamp-merch` | Bearer `INTERNAL_SECRET` | Physical-only order history for Merch Ops |
+| `GET /api/status` | Bearer `INTERNAL_SECRET` | Redis, cursors, Laylo and Beehiiv health |
 | `GET /` | none | Static info page (not a health endpoint) |
 
 ## How to verify it's healthy
 1. **Alerts are the primary signal** — `src/lib/notify.ts` emails on: cron crash,
    ≥5 failures or >10% fail rate in a run, Shotgun token expiry (401), and
-   Laylo webhook silence ≥21 days. No email = healthy.
+   Laylo webhook silence ≥21 days. No alert is not proof of a successful run; verify logs and source/target counts.
 2. Manual check: hit a cron route with the secret and read the JSON
    (`ok`, counts, `nextCursor`, `redisConfigured`, `warning`):
    ```bash
@@ -37,8 +41,7 @@ All paths converge on `src/lib/subscribe.ts` → Beehiiv
 3. Beehiiv subscriber count should tick up after events/releases.
 4. Vercel dashboard → Logs shows each cron run.
 
-There is **no `/api/health` endpoint yet** — planned as part of the ops
-dashboard (Redis ping + last-run cursors + last Laylo webhook age).
+Use authenticated **`GET /api/status`** for Redis reachability, source cursors, last Laylo webhook age and Beehiiv health.
 
 ## Failure modes & recovery
 - **Shotgun token expired**: alert email includes reissue instructions; set new

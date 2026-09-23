@@ -2,7 +2,7 @@
 
 ## What this is
 
-A subscriber sync service that automatically moves fan emails from Daisy Chain's platforms into Beehiiv (the newsletter). Built with Next.js (App Router), deployed on Vercel.
+A subscriber sync service and protected physical Bandcamp order feed for Merch Ops. The subscriber paths automatically move fan emails from Daisy Chain's platforms into Beehiiv (the newsletter). Built with Next.js (App Router), deployed on Vercel.
 
 **Repo**: `daisychainsd/dc-email-api` (renamed from `daisychain-mail` on 2026-05-02)
 **Production URL**: `dc-email-api.vercel.app`
@@ -10,6 +10,8 @@ A subscriber sync service that automatically moves fan emails from Daisy Chain's
 **Laylo** handles RSVPs and fan signups via live webhook. **Shotgun** is integrated directly via the Tickets API (daily cron). **Bandcamp** feeds directly via sales API (daily cron).
 
 ## What it does today
+
+- **Bandcamp physical merchandise → Ops:** protected `GET /api/internal/bandcamp-merch` reads Merch Orders API v4 using the existing OAuth cache. The site polls hourly at minute 25 and owns order storage/fulfillment. Digital music sales are excluded. Production feed and the initial eight-order import/replay were verified September 22; four existing website orders were preserved.
 
 - **Bandcamp → Beehiiv**: A daily cron job (15:00 UTC) calls the Bandcamp sales API, pulls buyer emails since the last run, and subscribes them to Beehiiv. OAuth tokens are fetched automatically from Client ID + Secret and cached in Redis.
 - **Laylo → Beehiiv**: A live webhook endpoint receives every fan sign-up event from Laylo (HMAC-SHA256 verified) and subscribes the email in real time.
@@ -30,6 +32,11 @@ A subscriber sync service that automatically moves fan emails from Daisy Chain's
 ## Architecture
 
 ```
+Site cron (hourly at minute 25)
+  └─ GET /api/internal/bandcamp-merch (INTERNAL_SECRET)
+       └─ bandcampMerch.ts → bandcampAuth.ts → merchorders/4/get_orders
+            └─ site normalizes/persists physical orders in Supabase Merch Ops
+
 Vercel Cron (daily 15:00 UTC)
   └─ GET /api/cron/bandcamp
        ├─ bandcampAuth.ts  → oauth_token (client_credentials, cached in Redis)
@@ -88,6 +95,8 @@ All set on Vercel production. Upstash Redis instance: `fast-gull-89445.upstash.i
 | `/api/cron/shotgun` | GET | `CRON_SECRET` | Daily Shotgun ticket sync (16:00 UTC) |
 | `/api/webhooks/laylo` | POST | HMAC-SHA256 | Real-time Laylo fan signups |
 | `/api/internal/backfill` | POST | `INTERNAL_SECRET` | Trigger Bandcamp backfill for a date window |
+| `/api/internal/bandcamp-merch` | GET | `INTERNAL_SECRET` | Physical-only order feed; no subscriber work |
+| `/api/status` | GET | `INTERNAL_SECRET` | Redis, source cursors, Laylo and Beehiiv health |
 | `/api/internal/import-csv` | POST | `INTERNAL_SECRET` | Bulk import from a CSV file body |
 
 ## Cron response format
@@ -119,10 +128,13 @@ src/
       cron/shotgun/route.ts        — daily Shotgun cron handler
       webhooks/laylo/route.ts      — Laylo webhook handler (HMAC-SHA256 verified)
       internal/backfill/route.ts   — admin: Bandcamp backfill by date range
+      internal/bandcamp-merch/route.ts — protected physical order feed
+      status/route.ts              — protected service health
       internal/import-csv/route.ts — admin: CSV bulk import
   lib/
     bandcamp.ts        — Bandcamp sales_report API client
     bandcampAuth.ts    — OAuth token fetch + Redis cache
+    bandcampMerch.ts   — merchandise-only v4 request and protected response
     beehiiv.ts         — Beehiiv subscribe API client (with retry + backoff, tracks new vs existing)
     extractEmail.ts    — Extract email from unknown webhook payload shape
     normalize.ts       — Trim + lowercase email, reject invalid

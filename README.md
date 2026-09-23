@@ -1,6 +1,6 @@
 # Daisy Chain Mail
 
-Node/TypeScript subscriber sync for [Vercel](https://vercel.com): polls **Bandcamp** sales, accepts **Laylo** webhooks, and subscribes emails to **Beehiiv**. Optional **CSV import** for Shotgun or other exports.
+Node/TypeScript subscriber sync for [Vercel](https://vercel.com): polls **Bandcamp** sales, accepts **Laylo** webhooks, and subscribes emails to **Beehiiv**. Optional **CSV import** for Shotgun or other exports. Also serves an authenticated **physical Bandcamp order feed** for Merch Ops; this feed does not subscribe buyers or include standalone digital music sales.
 
 ## Setup
 
@@ -84,3 +84,5 @@ Set **`BANDCAMP_CLIENT_ID`** and **`BANDCAMP_CLIENT_SECRET`** in Vercel (from Ba
 `GET /api/internal/bandcamp-merch` is a read-only, `INTERNAL_SECRET`-protected feed for Daisy Chain Merch Ops. It calls Bandcamp `merchorders/4/get_orders` with the configured `BANDCAMP_BAND_ID` (and optional `BANDCAMP_MEMBER_BAND_ID`), all dates, shipped and unshipped. It uses the existing OAuth cache and returns physical merchandise only. This route does not subscribe buyers, move the sales-report cursor, mark Bandcamp orders shipped, or send email.
 
 The site calls this feed hourly at minute 25, using its existing `DC_EMAIL_API_INTERNAL_SECRET`. The site owns normalization, Supabase persistence, deduplication and manual fulfillment. Physical Bandcamp orders appear alongside website orders at [Merch Ops](https://www.daisychainsd.com/ops/merch); digital music sales remain outside the shipping queue. Feed failures return 503 without exposing raw provider errors/customer data. Responses are never cached. Run `npm test` for auth, physical endpoint and error-path checks. See [site runbook](https://github.com/daisychainsd/daisychain-site/blob/main/OPERATIONS.md#bandcamp-physical-orders) and [deployment record](https://github.com/daisychainsd/daisychain-site/blob/main/BANDCAMP-ORDERS-2026-09-22.md).
+
+Production verification September 22: the protected feed returns eight physical purchases (HTTP 200); unauthenticated requests return 401. The site imported all eight alongside four website orders and verified a duplicate-free replay. No further Bandcamp credentials or production setup SQL are required.
